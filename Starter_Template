@@ -1,5 +1,5 @@
 //@version=4
-strategy(overlay=true, title="FP ML L/S ICP [DEV]", default_qty_type = strategy.percent_of_equity, initial_capital = 100000, default_qty_value = 100, pyramiding = 0, commission_type=strategy.commission.percent, commission_value=0.04)
+strategy(overlay=true, title="Bot Template", default_qty_type = strategy.percent_of_equity, initial_capital = 100000, default_qty_value = 100, pyramiding = 0, commission_type=strategy.commission.percent, commission_value=0.04)
 
 ////////// ** Inputs ** //////////
 
