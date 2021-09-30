@@ -1,0 +1,113 @@
+//@version=4
+strategy(overlay=true, title="FP ML L/S ICP [DEV]", default_qty_type = strategy.percent_of_equity, initial_capital = 100000, default_qty_value = 100, pyramiding = 0, commission_type=strategy.commission.percent, commission_value=0.04)
+
+////////// ** Inputs ** //////////
+
+// Date Range
+start_date = input(title="Start Date", type=input.integer, defval=1, minval=1, maxval=31, group="Date Range")
+start_month = input(title="Start Month", type=input.integer, defval=1, minval=1, maxval=12, group="Date Range")
+start_year = input(title="Start Year", type=input.integer, defval=2017, minval=1800, maxval=3000, group="Date Range")
+end_date = input(title="End Date", type=input.integer, defval=1, minval=1, maxval=3, group="Date Range")
+end_month = input(title="End Month", type=input.integer, defval=1, minval=1, maxval=12, group="Date Range")
+end_year = input(title="End Year", type=input.integer, defval=2077, minval=1800, maxval=3000, group="Date Range")
+in_date_range = (time >= timestamp(syminfo.timezone, start_year, start_month, start_date, 0, 0)) and (time < timestamp(syminfo.timezone, end_year, end_month, end_date, 0, 0))
+
+// Stoploss and Profits Inputs
+
+// Enable Long Strategy
+enable_long_strategy = input(true, title="Enable Long Strategy", group="SL/TP For Long Strategy",inline="1")
+long_stoploss_value = input(defval=5.482, title='Stoploss %', type=input.float, minval=0.1, step=0.2, group="SL/TP For Long Strategy",inline="2")
+long_stoploss_percentage = (close * (long_stoploss_value / 100)) / syminfo.mintick
+long_takeprofit_value = input(defval=8.137, title='Take Profit %', type=input.float, minval=0.1, step=0.2, group="SL/TP For Long Strategy",inline="2")
+long_takeprofit_percentage = (close * (long_takeprofit_value / 100)) / syminfo.mintick
+
+// Enable Short Strategy
+enable_short_strategy = input(true, title="Enable Short Strategy", group="SL/TP For Short Strategy",inline="3")
+short_stoploss_value = input(defval=1.4, title='Stoploss %', type=input.float, minval=0.1, step=0.2, group= "SL/TP For Short Strategy",inline="4")
+short_stoploss_percentage = (close * (short_stoploss_value / 100)) / syminfo.mintick
+short_takeprofit_value = input(defval=4.2, title='Take Profit %', type=input.float, minval=0.1, step=0.2, group="SL/TP For Short Strategy",inline="4")
+short_takeprofit_percentage = (close * (short_takeprofit_value / 100)) / syminfo.mintick
+
+
+// Plot Stoploss & Take Profit Levels
+long_stoploss_price = strategy.position_avg_price * (1 - long_stoploss_value/100)
+long_takeprofit_price = strategy.position_avg_price * (1 + long_takeprofit_value/100)
+short_stoploss_price = strategy.position_avg_price * (1 + short_stoploss_value/100)
+short_takeprofit_price = strategy.position_avg_price * (1 - short_takeprofit_value/100)
+plot(strategy.position_size <= 0 ? na : long_stoploss_price, color=color.red, style=plot.style_linebr, linewidth=2)
+plot(strategy.position_size <= 0 ? na : long_takeprofit_price, color=color.green, style=plot.style_linebr, linewidth=2)
+plot(strategy.position_size >= 0 ? na : short_stoploss_price, color=color.red, style=plot.style_linebr, linewidth=2)
+plot(strategy.position_size >= 0 ? na : short_takeprofit_price, color=color.green, style=plot.style_linebr, linewidth=2)
+
+////////// ** Indicators ** //////////
+
+// RSI
+rsiInput = input(12,title="RSI")
+len = rsiInput
+src = close
+up = rma(max(change(src), 0), len)
+down = rma(-min(change(src), 0), len)
+rsi = down == 0 ? 100 : up == 0 ? 0 : 100 - 100 / (1 + up / down)
+
+// MFI
+mfiInput = input(3,title="MFI")
+MFIlength = mfiInput
+MFIsrc = hlc3
+MFIupper = sum(volume * (change(MFIsrc) <= 0 ? 0 : MFIsrc), MFIlength)
+MFIlower = sum(volume * (change(MFIsrc) >= 0 ? 0 : MFIsrc), MFIlength)
+_rsi(MFIupper, MFIlower) =>
+    if MFIlower == 0
+        100
+    if MFIupper == 0
+        0
+	100.0 - (100.0 / (1.0 + MFIupper / MFIlower))
+mfi = _rsi(MFIupper, MFIlower)
+
+// Bollinger Bands
+bbandLength = input(6, title="BBand")
+bbandMultiple = input(1.5, step=0.05, title="BBand Multiple")
+length1 = bbandLength
+src1 = close
+mult1 = bbandMultiple
+basis1 = sma(src1, length1)
+dev1 = mult1 * stdev(src1, length1)
+upper1 = basis1 + dev1
+lower1 = basis1 - dev1
+
+
+////////// ** Triggers and Guards ** //////////
+
+// Strategy Parameters
+MFILowerLevel3 = input(21, title="MFI Lower Level 3")
+RSILowerLevel3 = input(42, title="RSI Lower Level 3")
+MFIUpperLevel3 = input(61, title="MFI Upper Level 3")
+RSIUpperLevel3 = input(54, title="RSI Upper Level 3")
+BBBuyTrigger3 = src1 < lower1
+BBSellTrigger3 = src1 > upper1
+mfiBuyGuard3 = mfi < MFILowerLevel3
+rsiBuyGuard3 = rsi < RSILowerLevel3
+mfiSellGuard3 = mfi > MFIUpperLevel3 
+rsiSellGuard3 = rsi > RSIUpperLevel3
+
+
+
+//////////** Strategy Signals ** //////////
+
+// Signals
+buy_signal = BBBuyTrigger3 and mfiBuyGuard3 and rsiBuyGuard3
+sell_signal = BBSellTrigger3 and mfiSellGuard3 and rsiSellGuard3
+closeBuy_signal = BBSellTrigger3 and mfiSellGuard3
+closeSell_signal =BBBuyTrigger3 and mfiBuyGuard3
+
+// Long Strategy
+if buy_signal and in_date_range and enable_long_strategy == true
+    strategy.entry("Long", strategy.long, when = buy_signal, alert_message = "ML_ICP_LONG")
+    strategy.close("Long", when = sell_signal, alert_message = "ML_ICP_CLOSE_LONG")
+    strategy.exit("Long  SL/TP", from_entry="Long", loss=long_stoploss_percentage, profit=long_takeprofit_percentage, alert_message="ML_ICP_CLOSE_LONG")
+
+// Short Strategy
+if sell_signal and in_date_range and enable_short_strategy == true
+    strategy.entry("Short", strategy.short, when = sell_signal, alert_message = "ML_ICP_SHORT")
+    strategy.close("Short", when = buy_signal, alert_message = "ML_ICP_CLOSE_SHORT")
+    strategy.exit("Short SL/TP", from_entry="Short", loss=short_stoploss_percentage, profit=short_takeprofit_percentage, alert_message="ML_ICP_CLOSE_SHORT")
+   
